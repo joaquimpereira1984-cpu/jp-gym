@@ -32,6 +32,29 @@ const from=$('rFrom').value||'2000-01-01',to=$('rTo').value||new Date().toISOStr
 const ctx=await buildContext();
 const L=$('rLang').value,bi=L==='both';
 const T=(fr,pt)=>bi?(fr+' / '+pt):(L==='fr'?fr:pt);
+const weights=(ctx.weights||[]).filter(x=>x.measured_at.slice(0,10)>=from&&x.measured_at.slice(0,10)<=to).sort((a,b)=>a.measured_at.localeCompare(b.measured_at));
+const foodInRange=(ctx.food||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
+const exInRange=(ctx.exercises||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
+const suppInRange=(ctx.supplements||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
+// Raw free text typed by the user (goals, notes, food/exercise descriptions) isn't a fixed UI label, so it can't
+// go through T(); translate it on the fly into the selected report language via the translate-batch edge function.
+const rawTexts=[];
+(ctx.profile?.goals||[]).forEach(g=>{if(g)rawTexts.push(g)});
+weights.forEach(w=>{if(w.note)rawTexts.push(w.note)});
+foodInRange.forEach(f=>{if(f.description)rawTexts.push(f.description)});
+exInRange.forEach(e=>{if(e.exercise_name)rawTexts.push(e.exercise_name);if(e.muscle_group)rawTexts.push(e.muscle_group)});
+suppInRange.forEach(s=>{if(s.notes)rawTexts.push(s.notes)});
+let trMap={};
+if(!bi&&rawTexts.length){
+  try{
+    const uniq=[...new Set(rawTexts)];
+    const sess=(await sb.auth.getSession()).data.session;
+    const r=await fetch(CFG.AI.translate,{method:'POST',headers:{'content-type':'application/json',...(sess?.access_token?{Authorization:`Bearer ${sess.access_token}`}:{})},body:JSON.stringify({texts:uniq,targetLang:L})});
+    const j=await r.json();
+    (j.translations||[]).forEach((t,i)=>{if(t)trMap[uniq[i]]=t});
+  }catch{}
+}
+const TT=s=>(s&&trMap[s])||s||'';
 const {jsPDF}=window.jspdf;
 const doc=new jsPDF();
 const GOLD=[214,182,84],GOLD2=[241,215,122],WHITE=[244,245,247],MUTED=[167,173,182],BG=[9,10,12],PANEL=[21,25,31];
@@ -51,21 +74,19 @@ sectionTitle(T('Profil','Perfil'));
 line((T('Nom','Nome'))+': '+(ctx.profile?.display_name||user.email),{bold:true});
 if(ctx.profile?.age)line((T('Âge','Idade'))+': '+ctx.profile.age+' '+T('ans','anos'));
 if(ctx.profile?.height_cm)line((T('Taille','Altura'))+': '+ctx.profile.height_cm+' cm');
-if(ctx.profile?.goals?.length)line((T('Objectifs','Objetivos'))+': '+ctx.profile.goals.join(', '));
+if(ctx.profile?.goals?.length)line((T('Objectifs','Objetivos'))+': '+ctx.profile.goals.map(TT).join(', '));
 y+=2;
 
-const weights=(ctx.weights||[]).filter(x=>x.measured_at.slice(0,10)>=from&&x.measured_at.slice(0,10)<=to).sort((a,b)=>a.measured_at.localeCompare(b.measured_at));
 sectionTitle(T('Poids','Peso'));
 if(!weights.length)line(T('Aucune donnée','Sem dados'),{color:MUTED});
 else{
   const first=weights[0].weight_kg,last=weights[weights.length-1].weight_kg,delta=(last-first).toFixed(2);
   line(T(`Variation sur la période : `,`Variação no período: `)+`${first} kg → ${last} kg  (${delta>=0?'+':''}${delta} kg)`,{bold:true,color:GOLD});
   y+=1;
-  weights.forEach(w=>{line(`${w.measured_at.slice(0,10)}  —  ${w.weight_kg} kg${w.note?'  ·  '+w.note:''}`)});
+  weights.forEach(w=>{line(`${w.measured_at.slice(0,10)}  —  ${w.weight_kg} kg${w.note?'  ·  '+TT(w.note):''}`)});
 }
 y+=3;
 
-const foodInRange=(ctx.food||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
 sectionTitle(T('Alimentation','Alimentação'));
 if(!foodInRange.length)line(T('Aucune donnée','Sem dados'),{color:MUTED});
 else{
@@ -75,7 +96,7 @@ else{
     line(d,{bold:true,color:GOLD,size:9.5});
     byDay[d].sort((a,b)=>a.logged_at.localeCompare(b.logged_at)).forEach(f=>{
       const mn=mealNames[f.meal_type]?.[L==='fr'?'fr':'pt']||f.meal_type||'';
-      line(`•  ${mn}: ${f.description||''}`,{indent:4});
+      line(`•  ${mn}: ${TT(f.description)}`,{indent:4});
       line(`    ${f.calories??'?'} kcal   ·   P ${f.protein_g??'?'} g   ·   ${T('Gluc.','Hid.')} ${f.carbs_g??'?'} g   ·   ${T('Lip.','Gord.')} ${f.fat_g??'?'} g`,{indent:4,size:8,color:MUTED});
     });
     y+=1;
@@ -83,7 +104,6 @@ else{
 }
 y+=3;
 
-const exInRange=(ctx.exercises||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
 sectionTitle(T('Entraînement','Treino'));
 if(!exInRange.length)line(T('Aucune donnée','Sem dados'),{color:MUTED});
 else{
@@ -94,21 +114,20 @@ else{
     byDay[d].forEach(e=>{
       const dur=e.duration_min?`  ·  ${e.duration_min} min`:'';
       const reps=(e.reps||[]).length?'  ·  '+(e.reps||[]).join(',')+' reps':'';
-      line(`•  ${e.exercise_name}${e.muscle_group?' ('+e.muscle_group+')':''}  —  ${e.weight_kg??'—'} kg  —  ${e.sets??'—'} ${T('séries','séries')}${reps}${dur}`,{indent:4});
+      line(`•  ${TT(e.exercise_name)}${e.muscle_group?' ('+TT(e.muscle_group)+')':''}  —  ${e.weight_kg??'—'} kg  —  ${e.sets??'—'} ${T('séries','séries')}${reps}${dur}`,{indent:4});
     });
     y+=1;
   });
 }
 y+=3;
 
-const suppInRange=(ctx.supplements||[]).filter(x=>x.logged_at.slice(0,10)>=from&&x.logged_at.slice(0,10)<=to);
 sectionTitle(T('Compléments','Suplementos'));
 if(!suppInRange.length)line(T('Aucune donnée','Sem dados'),{color:MUTED});
 else{
   const byDay=groupByDay(suppInRange,'logged_at');
   Object.keys(byDay).sort().forEach(d=>{
     line(d,{bold:true,color:GOLD,size:9.5});
-    byDay[d].forEach(s=>{const hm=new Date(s.logged_at).toLocaleTimeString(L==='fr'?'fr-FR':'pt-PT',{hour:'2-digit',minute:'2-digit'});line(`•  ${hm}  ${s.supplement}  —  ${s.amount??''} ${s.unit||''}${s.notes?'  ·  '+s.notes:''}`,{indent:4})});
+    byDay[d].forEach(s=>{const hm=new Date(s.logged_at).toLocaleTimeString(L==='fr'?'fr-FR':'pt-PT',{hour:'2-digit',minute:'2-digit'});line(`•  ${hm}  ${s.supplement}  —  ${s.amount??''} ${s.unit||''}${s.notes?'  ·  '+TT(s.notes):''}`,{indent:4})});
     y+=1;
   });
 }
