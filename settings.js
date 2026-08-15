@@ -5,6 +5,6 @@ window.JP_GYM_CONFIG = {
     analyzeFood: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/analyze-food',
     analyzeMachine: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/analyze-machine',
     generateWorkout: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/generate-workout',
-    coach: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/jp-coach'
+    coach: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/jp-coach',
+    translate: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/translate-batch'
   }
-};
