@@ -14,4 +14,5 @@
 <section id="coach" class="sec"><div class="section-title"><div><h2>JP Coach IA</h2><p data-i18n="coachDesc">Pergunta sobre treino, alimentação, recuperação e progresso usando os teus registos.</p></div></div><div class="card"><div id="chat" class="list"></div><textarea id="coachQ" data-i18n-placeholder="coachPlaceholder" placeholder="O que treino hoje?"></textarea><button id="askCoach" class="btn full" style="margin-top:10px" data-i18n="askCoach">Perguntar ao JP Coach</button></div></section>
 <section id="settings" class="sec"><div class="section-title"><div><h2 data-i18n="settings">Configurações</h2><p data-i18n="settingsDesc">Idioma, sessão e estado das integrações.</p></div></div><div class="card"><div id="integrationStatus" class="list"></div></div></section>
 <section id="print-report" class="sec"></section>
-</main><nav class="mobile-nav" id="mobileNav"></nav></div></div><div id="toast" class="toast hidden"></div><script type="module" src="./app.js"></script></body></html>
+</main><nav class="mobile-nav" id="mobileNav"></nav></div></div><div id="toast" class="toast hidden"></div><script>window.addEventListener('error',function(e){var m=document.getElementById('authmsg');if(m&&!m.textContent)m.textContent='Erro ao carregar: '+(e.message||'falha desconhecida')},true);</script>
+<script type="module" src="./app.js"></script></body></html>
