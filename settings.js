@@ -8,3 +8,4 @@ window.JP_GYM_CONFIG = {
     coach: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/jp-coach',
     translate: 'https://kzdgisvqgzhpqbpitsbh.supabase.co/functions/v1/translate-batch'
   }
+};
