@@ -14,7 +14,52 @@ async function loadDashboard(){if(!user)return;const since=new Date(Date.now()-7
 async function checkMeasReminder(){if(!user)return;const{data}=await sb.from('measurements').select('measured_at').eq('user_id',user.id).order('measured_at',{ascending:false}).limit(1);const box=$('measReminder');if(!box)return;const last=data?.[0]?.measured_at;let days=null;if(last)days=Math.floor((Date.now()-new Date(last).getTime())/864e5);if(!last||days>=7){box.classList.remove('hidden');$('measReminderTitle').textContent=tr('measReminderHeading');$('measReminderText').textContent=last?tr('measReminderDue').replace('{n}',days):tr('measReminderNever');$('measReminderCta').textContent=tr('measReminderCta')}else{box.classList.add('hidden')}}
 $('measReminderCta').onclick=()=>openSec('progress');
 async function loadProfile(){const{data}=await sb.from('profiles').select('*').eq('user_id',user.id).maybeSingle();$('pName').value=data?.display_name||'';$('pAge').value=data?.age||'';$('pHeight').value=data?.height_cm||'';$('pTarget').value=data?.target_weight_kg||'';$('pGoals').value=(data?.goals||[]).join(', ');$('pNotes').value=data?.health_notes?.notes||'';$('goalsText').value=(data?.goals||[]).join('\n')}$('saveProfile').onclick=async()=>{const payload={user_id:user.id,display_name:$('pName').value||null,age:+$('pAge').value||null,height_cm:+$('pHeight').value||null,target_weight_kg:+$('pTarget').value||null,goals:$('pGoals').value.split(',').map(x=>x.trim()).filter(Boolean),health_notes:{notes:$('pNotes').value},updated_at:new Date().toISOString()};const{error}=await sb.from('profiles').upsert(payload);toast(error?error.message:tr('save'),!error);if(!error)loadDashboard()};
-$('wDate').value=nowLocal();$('saveWeight').onclick=async()=>{const{error}=await sb.from('weight_logs').insert({user_id:user.id,measured_at:new Date($('wDate').value||Date.now()).toISOString(),weight_kg:+$('wKg').value,note:$('wNote').value||null});toast(error?error.message:tr('save'),!error);if(!error){$('wKg').value='';$('wNote').value='';loadWeights();loadDashboard()}};async function loadWeights(){const{data}=await sb.from('weight_logs').select('*').eq('user_id',user.id).order('measured_at',{ascending:false}).limit(30);$('weightList').innerHTML=(data||[]).map(x=>`<div class=item><b>${x.weight_kg} kg</b><br><small>${new Date(x.measured_at).toLocaleString(locale())}${x.note?' · '+esc(x.note):''}</small></div>`).join('')||`<div class=muted>—</div>`}
+let editingWeightId=null;
+function resetWeightForm(){
+  editingWeightId=null;
+  $('wDate').value=nowLocal();
+  $('wKg').value='';
+  $('wNote').value='';
+  $('saveWeight').textContent=tr('save');
+  const c=$('cancelEditWeight');if(c)c.remove();
+}
+function startEditWeight(x){
+  editingWeightId=x.id;
+  const d=new Date(x.measured_at);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+  $('wDate').value=d.toISOString().slice(0,16);
+  $('wKg').value=x.weight_kg??'';
+  $('wNote').value=x.note??'';
+  $('saveWeight').textContent=tr('saveChanges');
+  if(!$('cancelEditWeight')){
+    const b=document.createElement('button');
+    b.id='cancelEditWeight';b.type='button';b.className='btn secondary';b.textContent=tr('cancelEdit');
+    b.style.marginTop='10px';b.style.width='100%';
+    b.onclick=()=>resetWeightForm();
+    $('saveWeight').insertAdjacentElement('afterend',b);
+  }
+  $('wKg').scrollIntoView({behavior:'smooth',block:'center'});
+  $('wKg').focus();
+}
+$('wDate').value=nowLocal();
+$('saveWeight').onclick=async()=>{
+  const kg=+$('wKg').value;
+  if(!kg||kg<20||kg>300){toast(lang==='fr'?'Poids invalide.':'Peso inválido.',false);return}
+  const payload={measured_at:new Date($('wDate').value||Date.now()).toISOString(),weight_kg:kg,note:$('wNote').value||null};
+  let error;
+  if(editingWeightId){
+    ({error}=await sb.from('weight_logs').update(payload).eq('id',editingWeightId).eq('user_id',user.id));
+  }else{
+    ({error}=await sb.from('weight_logs').insert({user_id:user.id,...payload}));
+  }
+  toast(error?error.message:(editingWeightId?tr('saveChanges'):tr('save')),!error);
+  if(!error){resetWeightForm();loadWeights();loadDashboard()}
+};
+async function loadWeights(){
+  const{data}=await sb.from('weight_logs').select('*').eq('user_id',user.id).order('measured_at',{ascending:false}).limit(30);
+  window.__weightRows=data||[];
+  $('weightList').innerHTML=(data||[]).map(x=>`<div class=item><b>${x.weight_kg} kg</b><br><small>${new Date(x.measured_at).toLocaleString(locale())}${x.note?' · '+esc(x.note):''}</small><div class="item-actions"><button class="btn tiny secondary" data-edit-weight="${x.id}">${tr('edit')}</button></div></div>`).join('')||`<div class=muted>—</div>`;
+  document.querySelectorAll('[data-edit-weight]').forEach(b=>b.onclick=()=>{const row=(window.__weightRows||[]).find(r=>r.id===b.dataset.editWeight);if(row)startEditWeight(row)});
+}
 function fileToData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)})}
 $('fDate').value=nowLocal();
 $('fImg').onchange=async e=>{
