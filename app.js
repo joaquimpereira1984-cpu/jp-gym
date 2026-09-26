@@ -161,8 +161,65 @@ async function loadFood(){
   document.querySelectorAll('[data-edit-food]').forEach(b=>b.onclick=()=>{const row=(window.__foodRows||[]).find(r=>r.id===b.dataset.editFood);if(row)editFood(row)});
   document.querySelectorAll('[data-del-food]').forEach(b=>b.onclick=()=>deleteFood(b.dataset.delFood))
 }
-$('tDate').value=nowLocal();$('saveExercise').onclick=async()=>{const reps=$('tReps').value.split(',').map(x=>parseInt(x.trim())).filter(Number.isFinite);const{error}=await sb.from('exercise_logs').insert({user_id:user.id,logged_at:new Date($('tDate').value||Date.now()).toISOString(),exercise_name:$('tExercise').value,muscle_group:$('tMuscle').value||null,weight_kg:+$('tWeight').value||null,sets:+$('tSets').value||null,reps,duration_min:+$('tDuration').value||null});toast(error?error.message:tr('save'),!error);if(!error){$('tExercise').value='';$('tWeight').value='';$('tReps').value='';$('tDuration').value='';loadExercises();loadDashboard()}};async function loadExercises(){const{data}=await sb.from('exercise_logs').select('*').eq('user_id',user.id).order('logged_at',{ascending:false}).limit(30);$('exerciseList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.exercise_name)}</b><br><small>${new Date(x.logged_at).toLocaleString(locale())} · ${x.weight_kg??'—'} kg · ${x.sets??'—'} x ${(x.reps||[]).join(',')}${x.duration_min?' · '+x.duration_min+' min':''}</small></div>`).join('')||'<div class=muted>—</div>'}
-$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden')}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:$('mName').value||lastMachineAI.name||tr('machineFallback'),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();loadDashboard()}};async function loadMachines(){const{data}=await sb.from('gym_machines').select('*').eq('user_id',user.id).eq('active',true).order('created_at',{ascending:false});$('machineList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.name||tr('machineFallback'))}</b><br><small>${esc(x.muscle_group||'')} ${x.notes?'· '+esc(x.notes):''}</small></div>`).join('')||'<div class=muted>—</div>'}$('generateWorkout').onclick=async()=>{const out=$('workoutAI');out.classList.remove('hidden');out.textContent=tr('preparing');try{const context=await buildContext();const machines=(await sb.from('gym_machines').select('name,muscle_group,notes').eq('user_id',user.id).eq('active',true)).data||[];const j=await aiCall(CFG.AI.generateWorkout,{context,machines,language:lang});out.textContent=j.workout||j.answer||JSON.stringify(j,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}}
+let trainingSetCount=0;
+function addTrainingSet(weight='',reps=''){
+  trainingSetCount++;
+  const row=document.createElement('div');row.className='item training-set-row';
+  row.innerHTML=`<b>Série ${trainingSetCount}</b><div class="row2" style="margin-top:7px"><div><label>Peso (kg)</label><input class="ts-weight" type="number" step=".1" value="${esc(weight)}" inputmode="decimal"></div><div><label>Repetições</label><input class="ts-reps" type="number" min="1" step="1" value="${esc(reps)}" inputmode="numeric"></div></div><button type="button" class="btn tiny secondary ts-remove" style="margin-top:7px">Remover</button>`;
+  row.querySelector('.ts-remove').onclick=()=>{row.remove();renumberTrainingSets()};
+  $('tSetRows').appendChild(row)
+}
+function renumberTrainingSets(){trainingSetCount=0;document.querySelectorAll('#tSetRows .training-set-row').forEach(r=>{trainingSetCount++;r.querySelector('b').textContent='Série '+trainingSetCount})}
+function resetTrainingForm(){trainingSetCount=0;$('tSetRows').innerHTML='';addTrainingSet();$('tExercise').value='';$('tMuscle').value='';$('tDifficulty').value='';$('tMachine').value='';$('tDate').value=nowLocal()}
+$('tDate').value=nowLocal();$('addSet').onclick=()=>addTrainingSet();addTrainingSet();
+$('tMachine').onchange=()=>{const o=$('tMachine').selectedOptions[0];if(!o||!o.value)return;$('tExercise').value=o.dataset.name||o.textContent;$('tMuscle').value=o.dataset.muscle||''};
+async function fillTrainingMachines(){
+  const{data}=await sb.from('gym_machines').select('id,name,muscle_group').eq('user_id',user.id).eq('active',true).order('name');
+  const cur=$('tMachine').value;
+  $('tMachine').innerHTML='<option value="">— Escolher —</option>'+(data||[]).map(x=>`<option value="${esc(x.id)}" data-name="${esc(x.name)}" data-muscle="${esc(x.muscle_group||'')}">${esc(x.name)}</option>`).join('');
+  if(cur)$('tMachine').value=cur
+}
+$('saveExercise').onclick=async()=>{
+  const name=$('tExercise').value.trim()||$('tMachine').selectedOptions[0]?.dataset.name||'';
+  if(!name){toast('Escolhe ou escreve um exercício.',false);return}
+  const rows=[...document.querySelectorAll('#tSetRows .training-set-row')].map((r,i)=>({n:i+1,weight:parseFloat(r.querySelector('.ts-weight').value),reps:parseInt(r.querySelector('.ts-reps').value)})).filter(x=>Number.isFinite(x.reps)&&x.reps>0);
+  if(!rows.length){toast('Adiciona pelo menos uma série com repetições.',false);return}
+  const difficulty=$('tDifficulty').value;
+  const muscle=[$('tMuscle').value.trim(),difficulty?'Dificuldade: '+difficulty:''].filter(Boolean).join(' · ')||null;
+  const baseTime=new Date($('tDate').value||Date.now()).getTime();
+  const payload=rows.map(x=>({user_id:user.id,logged_at:new Date(baseTime+x.n*1000).toISOString(),exercise_name:name+' · S'+x.n,muscle_group:muscle,weight_kg:Number.isFinite(x.weight)?x.weight:null,sets:1,reps:[x.reps],duration_min:null}));
+  const{error}=await sb.from('exercise_logs').insert(payload);
+  toast(error?error.message:'Treino guardado.',!error);
+  if(!error){resetTrainingForm();loadExercises();loadDashboard()}
+};
+async function seedTodayWorkout(){
+  const key='jpgym_seed_2026_09_26_'+user.id;if(localStorage.getItem(key))return;
+  const start='2026-09-26T00:00:00+02:00',end='2026-09-27T00:00:00+02:00';
+  const{data:existing}=await sb.from('exercise_logs').select('exercise_name').eq('user_id',user.id).gte('logged_at',start).lt('logged_at',end);
+  if((existing||[]).some(x=>String(x.exercise_name||'').includes('Converging Chest Press'))){localStorage.setItem(key,'1');return}
+  const base=new Date('2026-09-26T15:05:00+02:00').getTime();
+  const items=[
+    ['Remo · S1','Cardio',null,[],1],['Remo · S2','Cardio',null,[],1],
+    ['Converging Chest Press · S1','Peito',18,[12],null],['Converging Chest Press · S2','Peito',18,[12],null],['Converging Chest Press · S3','Peito',25,[12],null],
+    ['Pec Fly · S1','Peito',39,[12],null],['Pec Fly · S2','Peito',45,[12],null],['Pec Fly · S3','Peito',52,[12],null],
+    ['Rear Delt · S1','Ombros posteriores',25,[20],null],['Rear Delt · S2','Ombros posteriores',39,[12],null],['Rear Delt · S3','Ombros posteriores',45,[12],null],
+    ['Diverging Lat Pulldown · S1','Costas',27,[20],null],['Diverging Lat Pulldown · S2','Costas',32,[12],null],['Diverging Lat Pulldown · S3','Costas',36,[12],null],
+    ['Tríceps na polia com corda · S1','Tríceps',9,[12],null],['Tríceps na polia com corda · S2','Tríceps',11.3,[12],null],['Tríceps na polia com corda · S3','Tríceps',13.5,[12],null],
+    ['Bíceps na polia · S1','Bíceps',9,[20],null],['Bíceps na polia · S2','Bíceps',11.3,[12],null],['Bíceps na polia · S3','Bíceps',13.5,[12],null],
+    ['Smith Machine · S1','Peito',10,[12],null],['Smith Machine · S2','Peito',20,[10],null],
+    ['Bíceps com barra · S1','Bíceps',15,[20],null],['Bíceps com barra · S2','Bíceps',25,[12],null],['Bíceps com barra · S3','Bíceps',25,[8],null]
+  ];
+  const payload=items.map((x,i)=>({user_id:user.id,logged_at:new Date(base+i*60000).toISOString(),exercise_name:x[0],muscle_group:x[1],weight_kg:x[2],sets:1,reps:x[3],duration_min:x[4]}));
+  payload[0].exercise_name='Remo · S1 · 195 m';payload[1].exercise_name='Remo · S2 · 215 m';
+  const{error}=await sb.from('exercise_logs').insert(payload);if(!error)localStorage.setItem(key,'1')
+}
+async function loadExercises(){
+  await seedTodayWorkout();
+  const{data}=await sb.from('exercise_logs').select('*').eq('user_id',user.id).order('logged_at',{ascending:false}).limit(100);
+  $('exerciseList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.exercise_name)}</b><br><small>${new Date(x.logged_at).toLocaleString(locale())}${x.muscle_group?' · '+esc(x.muscle_group):''}${x.weight_kg!=null?' · '+x.weight_kg+' kg':''}${(x.reps||[]).length?' · '+(x.reps||[]).join(',')+' reps':''}${x.duration_min?' · '+x.duration_min+' min':''}</small></div>`).join('')||'<div class=muted>—</div>';
+  fillTrainingMachines()
+}
+$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden')}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:$('mName').value||lastMachineAI.name||tr('machineFallback'),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;lastMachineAI={};$('mImg').value='';$('mPreview').src='';$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();fillTrainingMachines();loadDashboard()}};async function loadMachines(){const{data}=await sb.from('gym_machines').select('*').eq('user_id',user.id).eq('active',true).order('created_at',{ascending:false});$('machineList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.name||tr('machineFallback'))}</b><br><small>${esc(x.muscle_group||'')} ${x.notes?'· '+esc(x.notes):''}</small></div>`).join('')||'<div class=muted>—</div>'}$('generateWorkout').onclick=async()=>{const out=$('workoutAI');out.classList.remove('hidden');out.textContent=tr('preparing');try{const context=await buildContext();const machines=(await sb.from('gym_machines').select('name,muscle_group,notes').eq('user_id',user.id).eq('active',true)).data||[];const j=await aiCall(CFG.AI.generateWorkout,{context,machines,language:lang});out.textContent=j.workout||j.answer||JSON.stringify(j,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}}
 const staticSupp=[
 {key:'weight-gainer-massive-addict',name:'Weight Gainer Massive – Chocolate Hazelnut',img:'https://sport-nutrition.be/web/image/product.template/6738/image_1920?unique=b95ece7'},
 {key:'mutant-mass',name:'Mutant Mass – Muscle Mass Gainer',img:'https://mutantnation.com/cdn/shop/files/31502US_MUTANT_MASS_Triple_Chocolate_Flavor_5_LB_2.27_KG_v2.00_NS-L3.png?v=1745428582'},
