@@ -174,9 +174,6 @@ const staticSupp=[
 {key:'big-shot',name:'Big Shot Pre-Workout – Flash Cola',img:'./assets/supp_bigshot.jpg?v=20260903'},
 {key:'collagen-magnesium',name:'Collagen + Magnesium – Forest Fruit',img:'./assets/supp_collagen.jpg?v=20260903'},
 {key:'zmb6-lifepro',name:'ZMB6 Advanced Formula',img:'./assets/supp_zmb6.png?v=20260903'},
-{key:'weight-gainer-massive-addict',name:'Weight Gainer Massive – Chocolate Hazelnut',img:'https://www.optigura.fr/img/prods/11076/main-w500h500%402x.36443.webp'},
-{key:'mutant-mass',name:'Mutant Mass – Muscle Mass Gainer',img:'https://mutantnation.com/cdn/shop/files/31502US_MUTANT_MASS_Triple_Chocolate_Flavor_5_LB_2.27_KG_v2.00_NS-L3.png?v=1745428582'},
-{key:'hiro-lab-turkesterone',name:'Turkesterone 600 mg – 90 Vcaps',img:'https://bigforcestore.com/cdn/shop/files/TUKESTERONE-HIROLAB.png?v=1737478617&width=1946'}
 ];
 function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
 function imageForSupplement(s){
