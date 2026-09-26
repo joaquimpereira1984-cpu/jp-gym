@@ -196,8 +196,8 @@ async function loadSupplements(){
     const ptLabels={salt:'sal',iron:'ferro',fiber:'fibra',fibre:'fibra',sodium:'sódio',trans:'gorduras trans',calcium:'cálcio',energy:'energia',fat:'gordura',sugars:'açúcares',carbs:'hidratos de carbono',carbohydrates:'hidratos de carbono',potassium:'potássio',protein:'proteína',saturates:'gorduras saturadas',saturated_fat:'gorduras saturadas',allergens:'alergénios',cholesterol:'colesterol',ingredients:'ingredientes',flavour:'sabor'};
     const ptValue=(k,v)=>{
       if(lang!=='pt'||typeof v!=='string')return v;
-      if(k==='allergens')return v.replace(/Contains milk \(whey\) and soy \(lecithin\)\.?/gi,'Contém leite (soro de leite) e soja (lecitina).');
-      if(k==='ingredients')return v
+      if(k==='allergens'||k==='alergenios')return v.replace(/Contains milk \(whey\) and soy \(lecithin\)\.?/gi,'Contém leite (soro de leite) e soja (lecitina).');
+      if(k==='ingredients'||k==='ingredientes')return v
         .replace(/Carbo blend:/gi,'Mistura de hidratos de carbono:')
         .replace(/waxy maize starch/gi,'amido de milho ceroso').replace(/maltodextrin/gi,'maltodextrina')
         .replace(/fermented pea starch/gi,'amido de ervilha fermentado').replace(/rice/gi,'arroz')
@@ -217,7 +217,7 @@ async function loadSupplements(){
       return v;
     };
     const comp=Object.entries(composition).map(([k,v])=>{const nk=norm(k).replaceAll(' ','_');const label=lang==='pt'?(ptLabels[nk]||k.replaceAll('_',' ')):k.replaceAll('_',' ');return `<div class=kv><span>${esc(label)}</span><span>${esc(ptValue(nk,v))}</span></div>`}).join('');
-    return `<article class=supp-card><img src="${img}" alt="${esc(s.name)}"><div><span class=tag>${esc(s.brand||'')}</span><h3>${esc(s.name)}</h3><div class=kv><span>Dose</span><span>${esc(serving)}</span></div>${comp}<p class=muted style="font-size:11px">${esc(notes)}</p></div></article>`
+    return `<article class=supp-card><div class="supp-img-wrap ${s.image_key==='mutant-mass'?'mutant-zoom':''}"><img src="${img}" alt="${esc(s.name)}"></div><div><span class=tag>${esc(s.brand||'')}</span><h3>${esc(s.name)}</h3><div class=kv><span>Dose</span><span>${esc(serving)}</span></div>${comp}<p class=muted style="font-size:11px">${esc(notes)}</p></div></article>`
   }).join('');
   $('sName').innerHTML=catalog.map(s=>`<option>${esc(s.name)}</option>`).join('');
   loadSuppLogs()
