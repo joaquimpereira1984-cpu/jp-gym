@@ -252,12 +252,26 @@ async function buildContext(){
   ]);
   return{profile:p.data,weights:w.data||[],food:f.data||[],exercises:e.data||[],machines:m.data||[],supplements:s.data||[]}
 }
+const coachHistory=[];
+function cleanCoachAnswer(v){
+  return String(v||'').replace(/^JP Coach:\s*/i,'').replace(/\*\*/g,'').replace(/^#{1,6}\s*/gm,'').trim();
+}
 $('askCoach').onclick=async()=>{
   const q=$('coachQ').value.trim();if(!q)return;
-  const box=$('chat');box.innerHTML+=`<div class=item><b>${tr('you')}:</b> ${esc(q)}</div>`;$('coachQ').value='';
-  const a=document.createElement('div');a.className='item';a.textContent='JP Coach: …';box.appendChild(a);
-  try{const j=await aiCall(CFG.AI.coach,{message:q,context:await buildContext(),language:lang});a.textContent='JP Coach: '+(j.answer||j.response||JSON.stringify(j))}
-  catch(e){a.textContent='JP Coach: '+tr('aiCoachNotReady')+e.message}
+  const box=$('chat');
+  const userMsg=document.createElement('div');userMsg.className='item coach-msg coach-user';userMsg.innerHTML=`<b>${tr('you')}:</b> <span>${esc(q)}</span>`;box.appendChild(userMsg);
+  $('coachQ').value='';
+  coachHistory.push({role:'user',text:q});if(coachHistory.length>20)coachHistory.splice(0,coachHistory.length-20);
+  const reply=document.createElement('div');reply.className='item coach-msg coach-reply';reply.innerHTML='<b>JP Coach:</b> <span class="coach-answer">A pensar…</span>';box.appendChild(reply);
+  box.scrollTop=box.scrollHeight;
+  $('askCoach').disabled=true;
+  try{
+    const j=await aiCall(CFG.AI.coach,{message:q,context:await buildContext(),language:lang,history:coachHistory.slice(0,-1)});
+    const answer=cleanCoachAnswer(j.answer||j.response||JSON.stringify(j));
+    reply.querySelector('.coach-answer').textContent=answer;
+    coachHistory.push({role:'assistant',text:answer});if(coachHistory.length>20)coachHistory.splice(0,coachHistory.length-20);
+  }catch(e){reply.querySelector('.coach-answer').textContent=tr('aiCoachNotReady')+e.message}
+  finally{$('askCoach').disabled=false;box.scrollTop=box.scrollHeight}
 }
 $('makePdf').onclick=async()=>{
   const from=$('rFrom').value||'2000-01-01';
