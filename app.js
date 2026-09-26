@@ -193,7 +193,30 @@ async function loadSupplements(){
     const composition=(lang==='fr'&&s.composition_fr&&Object.keys(s.composition_fr).length)?s.composition_fr:(s.composition||{});
     const serving=(lang==='fr'&&s.serving_fr)?s.serving_fr:(s.serving||'—');
     const notes=(lang==='fr'&&s.notes_fr)?s.notes_fr:(s.notes||'');
-    const comp=Object.entries(composition).map(([k,v])=>`<div class=kv><span>${esc(k.replaceAll('_',' '))}</span><span>${esc(v)}</span></div>`).join('');
+    const ptLabels={salt:'sal',iron:'ferro',fiber:'fibra',fibre:'fibra',sodium:'sódio',trans:'gorduras trans',calcium:'cálcio',energy:'energia',fat:'gordura',sugars:'açúcares',carbs:'hidratos de carbono',carbohydrates:'hidratos de carbono',potassium:'potássio',protein:'proteína',saturates:'gorduras saturadas',saturated_fat:'gorduras saturadas',allergens:'alergénios',cholesterol:'colesterol',ingredients:'ingredientes',flavour:'sabor'};
+    const ptValue=(k,v)=>{
+      if(lang!=='pt'||typeof v!=='string')return v;
+      if(k==='allergens')return v.replace(/Contains milk \(whey\) and soy \(lecithin\)\.?/gi,'Contém leite (soro de leite) e soja (lecitina).');
+      if(k==='ingredients')return v
+        .replace(/Carbo blend:/gi,'Mistura de hidratos de carbono:')
+        .replace(/waxy maize starch/gi,'amido de milho ceroso').replace(/maltodextrin/gi,'maltodextrina')
+        .replace(/fermented pea starch/gi,'amido de ervilha fermentado').replace(/rice/gi,'arroz')
+        .replace(/sweet potato/gi,'batata-doce').replace(/Mutant Mass Pro-Matrix:/gi,'Mutant Mass Pro-Matrix:')
+        .replace(/whey protein concentrate/gi,'concentrado de proteína de soro de leite')
+        .replace(/hydrolyzed whey protein/gi,'proteína de soro de leite hidrolisada')
+        .replace(/whey protein isolate/gi,'isolado de proteína de soro de leite')
+        .replace(/milk protein concentrate/gi,'concentrado de proteína do leite')
+        .replace(/micellar casein/gi,'caseína micelar').replace(/milk protein isolate/gi,'isolado de proteína do leite')
+        .replace(/Lipid foods blend:/gi,'Mistura de lípidos:')
+        .replace(/fractionated coconut oil\/MCT/gi,'óleo de coco fracionado/MCT')
+        .replace(/avocado/gi,'abacate').replace(/flax seed/gi,'sementes de linhaça')
+        .replace(/pumpkin seed/gi,'sementes de abóbora').replace(/Thickener/gi,'Espessante')
+        .replace(/natural\/artificial flavours/gi,'aromas naturais/artificiais')
+        .replace(/colour/gi,'corante').replace(/soy lecithin/gi,'lecitina de soja')
+        .replace(/enzymes/gi,'enzimas');
+      return v;
+    };
+    const comp=Object.entries(composition).map(([k,v])=>{const nk=norm(k).replaceAll(' ','_');const label=lang==='pt'?(ptLabels[nk]||k.replaceAll('_',' ')):k.replaceAll('_',' ');return `<div class=kv><span>${esc(label)}</span><span>${esc(ptValue(nk,v))}</span></div>`}).join('');
     return `<article class=supp-card><img src="${img}" alt="${esc(s.name)}"><div><span class=tag>${esc(s.brand||'')}</span><h3>${esc(s.name)}</h3><div class=kv><span>Dose</span><span>${esc(serving)}</span></div>${comp}<p class=muted style="font-size:11px">${esc(notes)}</p></div></article>`
   }).join('');
   $('sName').innerHTML=catalog.map(s=>`<option>${esc(s.name)}</option>`).join('');
