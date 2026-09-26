@@ -7,4 +7,4 @@
 /* Imagens dos novos suplementos: ligeiramente maiores sem alterar os restantes */
 .supp-card:has(img[src*="sport-nutrition.be"]) img,
 .supp-card:has(img[src*="mutantnation.com"]) img,
-.supp-card:has(img[src*="bigforcestore.com"]) img{padding:0!important;transform:scale(1.10);}
+.supp-card:has(img[src*="bigforcestore.com"]) img{padding:0!important;transform:scale(1.18);}
