@@ -172,6 +172,27 @@ function addTrainingSet(weight='',reps=''){
 function renumberTrainingSets(){trainingSetCount=0;document.querySelectorAll('#tSetRows .training-set-row').forEach(r=>{trainingSetCount++;r.querySelector('b').textContent='Série '+trainingSetCount})}
 function resetTrainingForm(){trainingSetCount=0;$('tSetRows').innerHTML='';addTrainingSet();$('tExercise').value='';$('tMuscle').value='';$('tDifficulty').value='';$('tMachine').value='';$('tDate').value=nowLocal()}
 $('tDate').value=nowLocal();$('addSet').onclick=()=>addTrainingSet();addTrainingSet();
+$('tPhotoMachineBtn').onclick=()=>{$('tMachineImg').value='';$('tMachineImg').click()};
+$('tMachineImg').onchange=async e=>{
+  const f=e.target.files?.[0];if(!f)return;
+  const out=$('tMachinePhotoStatus');out.classList.remove('hidden');out.textContent='A identificar a máquina…';
+  try{
+    const imageData=await fileToData(f);
+    const ai=await aiCall(CFG.AI.analyzeMachine,{imageData,notes:'Return the gym machine name in English only. Use the standard English equipment name. Also identify the muscle group.',language:'en'});
+    const name=englishMachineName(String(ai.name||'').trim());
+    if(!name)throw Error('Não foi possível identificar o nome da máquina.');
+    const muscle=String(ai.muscle_group||'').trim()||null;
+    const{data:existing}=await sb.from('gym_machines').select('id,name,muscle_group').eq('user_id',user.id).eq('active',true);
+    let machine=(existing||[]).find(x=>norm(x.name)===norm(name));
+    if(!machine){
+      const{data,error}=await sb.from('gym_machines').insert({user_id:user.id,name,muscle_group:muscle,notes:null,ai_identification:{name,muscle_group:muscle},active:true}).select('id,name,muscle_group').single();
+      if(error)throw error;machine=data
+    }
+    await fillTrainingMachines();$('tMachine').value=machine.id;$('tExercise').value=machine.name;$('tMuscle').value=machine.muscle_group||'';
+    out.textContent='✓ '+machine.name+' adicionada. A fotografia não foi guardada.';
+    e.target.value='';setTimeout(()=>{out.classList.add('hidden');out.textContent=''},4500)
+  }catch(err){out.textContent='Erro: '+(err?.message||String(err));e.target.value=''}
+};
 $('tMachine').onchange=()=>{const o=$('tMachine').selectedOptions[0];if(!o||!o.value)return;$('tExercise').value=o.dataset.name||o.textContent;$('tMuscle').value=o.dataset.muscle||''};
 async function fillTrainingMachines(){
   const{data}=await sb.from('gym_machines').select('id,name,muscle_group').eq('user_id',user.id).eq('active',true).order('name');
@@ -219,7 +240,7 @@ async function loadExercises(){
   $('exerciseList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.exercise_name)}</b><br><small>${new Date(x.logged_at).toLocaleString(locale())}${x.muscle_group?' · '+esc(x.muscle_group):''}${x.weight_kg!=null?' · '+x.weight_kg+' kg':''}${(x.reps||[]).length?' · '+(x.reps||[]).join(',')+' reps':''}${x.duration_min?' · '+x.duration_min+' min':''}</small></div>`).join('')||'<div class=muted>—</div>';
   fillTrainingMachines()
 }
-$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden');if($('machineAI')){$('machineAI').classList.remove('hidden');$('machineAI').textContent='Fotografia pronta. Toca em “Identificar com IA” para adicionar a máquina; a imagem não será guardada.'}}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:$('mName').value||lastMachineAI.name||tr('machineFallback'),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;lastMachineAI={};$('mImg').value='';$('mPreview').src='';$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();fillTrainingMachines();loadDashboard()}};async function loadMachines(){const{data}=await sb.from('gym_machines').select('*').eq('user_id',user.id).eq('active',true).order('created_at',{ascending:false});$('machineList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.name||tr('machineFallback'))}</b><br><small>${esc(x.muscle_group||'')} ${x.notes?'· '+esc(x.notes):''}</small></div>`).join('')||'<div class=muted>—</div>'}$('generateWorkout').onclick=async()=>{const out=$('workoutAI');out.classList.remove('hidden');out.textContent=tr('preparing');try{const context=await buildContext();const machines=(await sb.from('gym_machines').select('name,muscle_group,notes').eq('user_id',user.id).eq('active',true)).data||[];const j=await aiCall(CFG.AI.generateWorkout,{context,machines,language:lang});out.textContent=j.workout||j.answer||JSON.stringify(j,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}}
+$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden');if($('machineAI')){$('machineAI').classList.remove('hidden');$('machineAI').textContent='Fotografia pronta. Toca em “Identificar com IA” para adicionar a máquina; a imagem não será guardada.'}}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:englishMachineName($('mName').value||lastMachineAI.name||tr('machineFallback')),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;lastMachineAI={};$('mImg').value='';$('mPreview').src='';$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();fillTrainingMachines();loadDashboard()}};async function loadMachines(){const{data}=await sb.from('gym_machines').select('*').eq('user_id',user.id).eq('active',true).order('created_at',{ascending:false});$('machineList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.name||tr('machineFallback'))}</b><br><small>${esc(x.muscle_group||'')} ${x.notes?'· '+esc(x.notes):''}</small></div>`).join('')||'<div class=muted>—</div>'}$('generateWorkout').onclick=async()=>{const out=$('workoutAI');out.classList.remove('hidden');out.textContent=tr('preparing');try{const context=await buildContext();const machines=(await sb.from('gym_machines').select('name,muscle_group,notes').eq('user_id',user.id).eq('active',true)).data||[];const j=await aiCall(CFG.AI.generateWorkout,{context,machines,language:lang});out.textContent=j.workout||j.answer||JSON.stringify(j,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}}
 const staticSupp=[
 {key:'weight-gainer-massive-addict',name:'Weight Gainer Massive – Chocolate Hazelnut',img:'https://sport-nutrition.be/web/image/product.template/6738/image_1920?unique=b95ece7'},
 {key:'mutant-mass',name:'Mutant Mass – Muscle Mass Gainer',img:'https://mutantnation.com/cdn/shop/files/31502US_MUTANT_MASS_Triple_Chocolate_Flavor_5_LB_2.27_KG_v2.00_NS-L3.png?v=1745428582'},
@@ -232,7 +253,11 @@ const staticSupp=[
 {key:'collagen-magnesium',name:'Collagen + Magnesium – Forest Fruit',img:'./assets/supp_collagen.jpg?v=20260903'},
 {key:'zmb6-lifepro',name:'ZMB6 Advanced Formula',img:'./assets/supp_zmb6.png?v=20260903'},
 ];
-function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}const machineEnglishMap=[
+ ['converging chest press','Converging Chest Press'],['chest press','Chest Press'],['pec fly','Pec Fly'],['rear delt','Rear Delt'],['diverging lat pulldown','Diverging Lat Pulldown'],['lat pulldown','Lat Pulldown'],['smith machine','Smith Machine'],['triceps pushdown','Triceps Pushdown'],['biceps cable curl','Cable Biceps Curl'],['cable curl','Cable Biceps Curl'],['biceps com barra','Barbell Biceps Curl'],['remo','Rowing Machine']
+];
+function englishMachineName(v){const n=norm(v);for(const [k,en] of machineEnglishMap){if(n.includes(norm(k)))return en}return String(v||'').trim()}
+
 function imageForSupplement(s){
   const exact=staticSupp.find(x=>x.key===s.image_key);
   if(exact)return exact.img;
