@@ -3,3 +3,8 @@
 
 /* JP GYM - imagens de suplementos sem deformacao */
 .supp-card > img{object-fit:contain!important;object-position:center!important;background:#fff!important;padding:8px!important;box-sizing:border-box!important;}
+
+/* Imagens dos novos suplementos: ligeiramente maiores sem alterar os restantes */
+.supp-card:has(img[src*="sport-nutrition.be"]) img,
+.supp-card:has(img[src*="mutantnation.com"]) img,
+.supp-card:has(img[src*="bigforcestore.com"]) img{padding:0!important;transform:scale(1.10);}
