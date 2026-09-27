@@ -60,7 +60,32 @@ async function loadWeights(){
   $('weightList').innerHTML=(data||[]).map(x=>`<div class=item><b>${x.weight_kg} kg</b><br><small>${new Date(x.measured_at).toLocaleString(locale())}${x.note?' · '+esc(x.note):''}</small><div class="item-actions"><button class="btn tiny secondary" data-edit-weight="${x.id}">${tr('edit')}</button></div></div>`).join('')||`<div class=muted>—</div>`;
   document.querySelectorAll('[data-edit-weight]').forEach(b=>b.onclick=()=>{const row=(window.__weightRows||[]).find(r=>r.id===b.dataset.editWeight);if(row)startEditWeight(row)});
 }
-function fileToData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)})}
+async function fileToData(file){
+  // Reduz a fotografia antes de a converter para Base64 para evitar picos de RAM em Android.
+  if(!file||!String(file.type||'').startsWith('image/'))return null;
+  const MAX=1280, QUALITY=.78;
+  let bmp=null,url='';
+  try{
+    if('createImageBitmap' in window)bmp=await createImageBitmap(file);
+    else{
+      url=URL.createObjectURL(file);
+      bmp=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url});
+    }
+    const sw=bmp.width||bmp.naturalWidth,sh=bmp.height||bmp.naturalHeight;
+    const scale=Math.min(1,MAX/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale));
+    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+    const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(bmp,0,0,w,h);
+    const data=canvas.toDataURL('image/jpeg',QUALITY);
+    canvas.width=1;canvas.height=1;
+    if(bmp&&typeof bmp.close==='function')bmp.close();
+    if(url)URL.revokeObjectURL(url);
+    return data;
+  }catch(e){
+    if(bmp&&typeof bmp.close==='function')bmp.close();
+    if(url)URL.revokeObjectURL(url);
+    throw e;
+  }
+}
 $('fDate').value=nowLocal();
 $('fImg').onchange=async e=>{
   const f=e.target.files?.[0];
@@ -94,7 +119,7 @@ $('analyzeFood').onclick=async()=>{
     if(Array.isArray(lastFoodAI.items)&&lastFoodAI.items.length){
       bits.push(lastFoodAI.items.map(i=>`• ${i.name||''}${i.estimated_g?` ~${i.estimated_g} g`:''}${i.calories!=null?` · ${i.calories} kcal`:''}`).join('\n'));
     }
-    out.textContent=bits.filter(Boolean).join('\n')||JSON.stringify(lastFoodAI,null,2);
+    out.textContent=bits.filter(Boolean).join('\n')||JSON.stringify(lastFoodAI,null,2);\n    foodImage=null; if($('fImg'))$('fImg').value='';
   }catch(e){out.textContent=tr('aiNotReady')+e.message}
 };
 function resetFoodForm(){
@@ -240,7 +265,7 @@ async function loadExercises(){
   $('exerciseList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.exercise_name)}</b><br><small>${new Date(x.logged_at).toLocaleString(locale())}${x.muscle_group?' · '+esc(x.muscle_group):''}${x.weight_kg!=null?' · '+x.weight_kg+' kg':''}${(x.reps||[]).length?' · '+(x.reps||[]).join(',')+' reps':''}${x.duration_min?' · '+x.duration_min+' min':''}</small></div>`).join('')||'<div class=muted>—</div>';
   fillTrainingMachines()
 }
-$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden');if($('machineAI')){$('machineAI').classList.remove('hidden');$('machineAI').textContent='Fotografia pronta. Toca em “Identificar com IA” para adicionar a máquina; a imagem não será guardada.'}}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:englishMachineName($('mName').value||lastMachineAI.name||tr('machineFallback')),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;lastMachineAI={};$('mImg').value='';$('mPreview').src='';$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();fillTrainingMachines();loadDashboard()}};const legacyMachineEnglish={'Polia Ajustável':'Adjustable Cable Machine','Máquina de Adução de Anca':'Hip Adduction Machine','Máquina de Abdominais':'Abdominal Crunch Machine','Máquina de Peitoral e Deltóide Posterior':'Pec Fly / Rear Delt Machine','Lat Pulldown Divergente':'Diverging Lat Pulldown'};
+$('mImg').onchange=async e=>{const f=e.target.files?.[0];if(f){machineImage=await fileToData(f);$('mPreview').src=machineImage;$('mPreview').classList.remove('hidden');if($('machineAI')){$('machineAI').classList.remove('hidden');$('machineAI').textContent='Fotografia pronta. Toca em “Identificar com IA” para adicionar a máquina; a imagem não será guardada.'}}};$('analyzeMachine').onclick=async()=>{const out=$('machineAI');out.classList.remove('hidden');out.textContent=tr('identifying');try{lastMachineAI=await aiCall(CFG.AI.analyzeMachine,{imageData:machineImage,notes:$('mNote').value,language:lang});$('mName').value=lastMachineAI.name||$('mName').value;$('mMuscle').value=lastMachineAI.muscle_group||$('mMuscle').value;out.textContent=lastMachineAI.summary||JSON.stringify(lastMachineAI,null,2);machineImage=null;if($('mImg'))$('mImg').value=''}catch(e){out.textContent=tr('aiNotReady')+e.message}};$('saveMachine').onclick=async()=>{const{error}=await sb.from('gym_machines').insert({user_id:user.id,name:englishMachineName($('mName').value||lastMachineAI.name||tr('machineFallback')),muscle_group:$('mMuscle').value||lastMachineAI.muscle_group||null,notes:$('mNote').value||null,ai_identification:lastMachineAI,active:true});toast(error?error.message:tr('save'),!error);if(!error){$('mName').value='';$('mMuscle').value='';$('mNote').value='';machineImage=null;lastMachineAI={};$('mImg').value='';$('mPreview').src='';$('mPreview').classList.add('hidden');$('machineAI').classList.add('hidden');loadMachines();fillTrainingMachines();loadDashboard()}};const legacyMachineEnglish={'Polia Ajustável':'Adjustable Cable Machine','Máquina de Adução de Anca':'Hip Adduction Machine','Máquina de Abdominais':'Abdominal Crunch Machine','Máquina de Peitoral e Deltóide Posterior':'Pec Fly / Rear Delt Machine','Lat Pulldown Divergente':'Diverging Lat Pulldown'};
 const legacyMuscleEnglish={'Corpo todo':'Full Body','Adutores':'Adductors','Abdominais':'Abdominals','Costas':'Back','Peitoral e Costas':'Chest / Rear Delts','Costas (Dorsais)':'Back (Lats)'};
 async function migrateMachineNamesToEnglish(){const q=await sb.from('gym_machines').select('id,name,muscle_group').eq('user_id',user.id).eq('active',true);if(q.error)return;for(const x of q.data||[]){const name=legacyMachineEnglish[x.name]||englishMachineName(x.name);const muscle=legacyMuscleEnglish[x.muscle_group]||x.muscle_group;if(name!==x.name||muscle!==x.muscle_group)await sb.from('gym_machines').update({name,muscle_group:muscle}).eq('id',x.id).eq('user_id',user.id)}}
 async function loadMachines(){await migrateMachineNamesToEnglish();const{data}=await sb.from('gym_machines').select('*').eq('user_id',user.id).eq('active',true).order('created_at',{ascending:false});$('machineList').innerHTML=(data||[]).map(x=>`<div class=item><b>${esc(x.name||tr('machineFallback'))}</b><br><small>${esc(x.muscle_group||'')} ${x.notes?'· '+esc(x.notes):''}</small></div>`).join('')||'<div class=muted>—</div>';fillTrainingMachines()}$('generateWorkout').onclick=async()=>{const out=$('workoutAI');out.classList.remove('hidden');out.textContent=tr('preparing');try{const context=await buildContext();const machines=(await sb.from('gym_machines').select('name,muscle_group,notes').eq('user_id',user.id).eq('active',true)).data||[];const j=await aiCall(CFG.AI.generateWorkout,{context,machines,language:lang});out.textContent=j.workout||j.answer||JSON.stringify(j,null,2)}catch(e){out.textContent=tr('aiNotReady')+e.message}}
