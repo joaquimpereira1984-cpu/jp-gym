@@ -119,7 +119,8 @@ $('analyzeFood').onclick=async()=>{
     if(Array.isArray(lastFoodAI.items)&&lastFoodAI.items.length){
       bits.push(lastFoodAI.items.map(i=>`• ${i.name||''}${i.estimated_g?` ~${i.estimated_g} g`:''}${i.calories!=null?` · ${i.calories} kcal`:''}`).join('\n'));
     }
-    out.textContent=bits.filter(Boolean).join('\n')||JSON.stringify(lastFoodAI,null,2);\n    foodImage=null; if($('fImg'))$('fImg').value='';
+    out.textContent=bits.filter(Boolean).join('\n')||JSON.stringify(lastFoodAI,null,2);
+    foodImage=null; if($('fImg'))$('fImg').value='';
   }catch(e){out.textContent=tr('aiNotReady')+e.message}
 };
 function resetFoodForm(){
