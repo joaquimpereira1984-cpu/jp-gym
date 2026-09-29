@@ -61,38 +61,44 @@ async function loadWeights(){
   document.querySelectorAll('[data-edit-weight]').forEach(b=>b.onclick=()=>{const row=(window.__weightRows||[]).find(r=>r.id===b.dataset.editWeight);if(row)startEditWeight(row)});
 }
 async function fileToData(file){
-  // Reduz a fotografia antes de a converter para Base64 para evitar picos de RAM em Android.
+  // Android/Samsung: avoid createImageBitmap on full camera photos; decode via a temporary blob URL,
+  // then downscale aggressively before Base64. This keeps peak WebView RAM much lower.
   if(!file||!String(file.type||'').startsWith('image/'))return null;
-  const MAX=1280, QUALITY=.78;
-  let bmp=null,url='';
+  const MAX=896,QUALITY=.68;
+  let url='';
   try{
-    if('createImageBitmap' in window)bmp=await createImageBitmap(file);
-    else{
-      url=URL.createObjectURL(file);
-      bmp=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url});
-    }
-    const sw=bmp.width||bmp.naturalWidth,sh=bmp.height||bmp.naturalHeight;
-    const scale=Math.min(1,MAX/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale));
+    url=URL.createObjectURL(file);
+    const img=await new Promise((res,rej)=>{
+      const im=new Image();
+      im.onload=()=>res(im);
+      im.onerror=()=>rej(new Error('Não foi possível ler a fotografia.'));
+      im.src=url;
+    });
+    const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+    const scale=Math.min(1,MAX/Math.max(sw,sh));
+    const w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale));
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-    const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(bmp,0,0,w,h);
+    const ctx=canvas.getContext('2d',{alpha:false,willReadFrequently:false});
+    ctx.drawImage(img,0,0,w,h);
     const data=canvas.toDataURL('image/jpeg',QUALITY);
+    img.src='';
     canvas.width=1;canvas.height=1;
-    if(bmp&&typeof bmp.close==='function')bmp.close();
-    if(url)URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);url='';
     return data;
-  }catch(e){
-    if(bmp&&typeof bmp.close==='function')bmp.close();
-    if(url)URL.revokeObjectURL(url);
-    throw e;
-  }
+  }finally{if(url)URL.revokeObjectURL(url)}
 }
 $('fDate').value=nowLocal();
 $('fImg').onchange=async e=>{
   const f=e.target.files?.[0];
   if(!f)return;
-  foodImage=await fileToData(f);
-  $('fPreview').src=foodImage;
-  $('fPreview').classList.remove('hidden');
+  try{
+    foodImage=await fileToData(f);
+    // Avoid keeping a second decoded full image in the DOM; analysis data remains in memory only once.
+    $('fPreview').src='';
+    $('fPreview').classList.add('hidden');
+    const out=$('foodAI');out.classList.remove('hidden');out.textContent=lang==='fr'?'Photo prête. Touche « Analyser avec IA ».':'Fotografia pronta. Toca em « Analisar com IA ».';
+    e.target.value='';
+  }catch(err){foodImage=null;e.target.value='';const out=$('foodAI');out.classList.remove('hidden');out.textContent='Erro ao preparar a fotografia: '+(err?.message||String(err));}
 };
 async function aiCall(url,body){
   const sess=(await sb.auth.getSession()).data.session;
