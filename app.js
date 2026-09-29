@@ -87,6 +87,33 @@ async function fileToData(file){
     return data;
   }finally{if(url)URL.revokeObjectURL(url)}
 }
+let foodCameraStream=null;
+async function closeFoodCamera(){
+  if(foodCameraStream){foodCameraStream.getTracks().forEach(t=>t.stop());foodCameraStream=null}
+  const v=$('foodCameraVideo');if(v)v.srcObject=null;
+  $('foodCameraBox').classList.add('hidden');
+}
+$('openFoodCamera').onclick=async()=>{
+  const out=$('foodAI');
+  try{
+    await closeFoodCamera();
+    foodCameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:960,max:1280},height:{ideal:720,max:960}},audio:false});
+    $('foodCameraVideo').srcObject=foodCameraStream;$('foodCameraBox').classList.remove('hidden');
+    await $('foodCameraVideo').play();
+  }catch(e){out.classList.remove('hidden');out.textContent='Não foi possível abrir a câmara: '+(e?.message||String(e))}
+};
+$('closeFoodCamera').onclick=()=>closeFoodCamera();
+$('captureFoodCamera').onclick=async()=>{
+  const v=$('foodCameraVideo'),out=$('foodAI');
+  try{
+    const sw=v.videoWidth||960,sh=v.videoHeight||720,MAX=896,scale=Math.min(1,MAX/Math.max(sw,sh));
+    const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(sw*scale));cv.height=Math.max(1,Math.round(sh*scale));
+    cv.getContext('2d',{alpha:false}).drawImage(v,0,0,cv.width,cv.height);
+    foodImage=cv.toDataURL('image/jpeg',.68);cv.width=1;cv.height=1;
+    await closeFoodCamera();
+    out.classList.remove('hidden');out.textContent=lang==='fr'?'Photo prête. Touche « Analyser avec IA ».':'Fotografia pronta. Toca em « Analisar com IA ».';
+  }catch(e){out.classList.remove('hidden');out.textContent='Erro ao fotografar: '+(e?.message||String(e))}
+};
 $('fDate').value=nowLocal();
 $('fImg').onchange=async e=>{
   const f=e.target.files?.[0];
